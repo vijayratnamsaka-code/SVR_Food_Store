@@ -1,0 +1,687 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SVR Food Store - Smart Order</title>
+    <!-- Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+    
+    <style>
+        :root {
+            --primary: #ea580c;
+            --primary-hover: #c2410c;
+            --dark: #0f172a;
+            --gray-bg: #f8fafc;
+            --border: #e2e8f0;
+            --success: #16a34a;
+            --danger: #dc2626;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+        body { background: var(--gray-bg); color: #1e293b; padding-bottom: 80px; }
+        
+        header { background: white; border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 50; }
+        .nav-container { max-width: 1000px; margin: 0 auto; padding: 12px 16px; display: flex; justify-content: space-between; align-items: center; }
+        .logo { font-size: 19px; font-weight: 800; color: var(--primary); display: flex; align-items: center; gap: 6px; }
+        .header-actions { display: flex; align-items: center; gap: 8px; }
+        
+        .btn { border: none; padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; transition: 0.2s; }
+        .btn-primary { background: var(--primary); color: white; }
+        .btn-outline { background: white; border: 1px solid var(--border); color: #334155; }
+        .btn-danger { background: #fee2e2; color: var(--danger); border: 1px solid #fca5a5; }
+        .btn-edit { background: #e0f2fe; color: #0284c7; border: 1px solid #bae6fd; }
+        .btn-loc { background: #ecfdf5; color: var(--success); border: 1px solid #a7f3d0; padding: 6px 10px; font-size: 12px; border-radius: 6px; }
+
+        .hero { background: linear-gradient(135deg, #ea580c, #f97316); color: white; padding: 22px 16px; text-align: center; border-radius: 16px; margin: 16px auto; max-width: 960px; }
+        .hero h1 { font-size: 20px; font-weight: 800; margin-bottom: 4px; }
+        .hero p { font-size: 13px; opacity: 0.95; }
+
+        .search-container { max-width: 960px; margin: 0 auto 12px; padding: 0 16px; }
+        .search-box { width: 100%; padding: 10px 14px; border: 1px solid var(--border); border-radius: 10px; background: white; font-size: 14px; outline: none; }
+        .filter-tags { display: flex; gap: 8px; overflow-x: auto; padding: 0 16px 12px; max-width: 960px; margin: 0 auto; scrollbar-width: none; }
+        .tag { padding: 6px 14px; background: white; border: 1px solid var(--border); border-radius: 20px; font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+        .tag.active { background: var(--dark); color: white; border-color: var(--dark); }
+
+        .container { max-width: 960px; margin: 0 auto; padding: 0 16px; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 14px; }
+        .card { background: white; border-radius: 12px; border: 1px solid var(--border); overflow: hidden; display: flex; flex-direction: column; justify-content: space-between; position: relative; }
+        .card.out-of-stock { opacity: 0.6; filter: grayscale(80%); }
+        .card img { width: 100%; height: 130px; object-fit: cover; }
+        .card-body { padding: 12px; flex: 1; display: flex; flex-direction: column; justify-content: space-between; }
+        .item-category { font-size: 10px; color: #64748b; text-transform: uppercase; font-weight: 700; margin-bottom: 4px; }
+        .card-title { font-size: 14px; font-weight: 600; margin-bottom: 6px; }
+        .card-price { font-size: 16px; font-weight: 700; color: var(--primary); margin-bottom: 10px; }
+        .stock-badge { position: absolute; top: 8px; right: 8px; background: #ef4444; color: white; font-size: 10px; padding: 3px 8px; border-radius: 12px; font-weight: bold; }
+
+        #adminDashboard { display: none; background: white; border-radius: 12px; padding: 16px; margin: 16px 0; border: 1px solid var(--border); }
+        .admin-form { display: grid; grid-template-columns: 1fr; gap: 8px; margin-top: 10px; }
+        .admin-manage-item { display: flex; align-items: center; justify-content: space-between; padding: 10px; border-bottom: 1px solid var(--border); }
+        .admin-order-card { background: #f8fafc; border: 1px solid var(--border); padding: 12px; border-radius: 8px; margin-top: 10px; font-size: 13px; }
+
+        .modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.55); z-index: 100; justify-content: center; align-items: flex-end; }
+        .modal-box { background: white; width: 100%; max-width: 500px; border-radius: 20px 20px 0 0; padding: 20px; max-height: 85vh; overflow-y: auto; }
+        .input-control { width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; margin-top: 8px; font-size: 14px; }
+        .btn-full { width: 100%; padding: 12px; font-size: 15px; margin-top: 14px; border-radius: 8px; }
+
+        /* Stepper */
+        .track-step-container { display: flex; justify-content: space-between; position: relative; margin: 15px 0 10px; }
+        .track-step { text-align: center; font-size: 11px; font-weight: bold; color: #94a3b8; flex: 1; }
+        .track-step.done { color: var(--success); }
+        .track-step.active { color: var(--primary); }
+
+        /* Payment Radio Boxes */
+        .pay-box { display: flex; gap: 10px; margin-top: 10px; }
+        .pay-option { flex: 1; border: 1px solid var(--border); padding: 10px; border-radius: 8px; text-align: center; cursor: pointer; font-size: 13px; font-weight: 600; }
+        .pay-option.selected { border-color: var(--primary); background: #fff7ed; color: var(--primary); }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="nav-container">
+            <div class="logo">🍔 SVR Food Store</div>
+            <div class="header-actions">
+                <button id="authBtn" class="btn btn-outline" onclick="toggleAuthModal()">Login</button>
+                <button id="accountBtn" class="btn btn-outline" style="display: none;" onclick="toggleAccountModal()">👤 My Account</button>
+                <button class="btn btn-primary" onclick="toggleCartModal()">🛒 (<span id="cartCount">0</span>)</button>
+            </div>
+        </div>
+    </header>
+
+    <div class="hero">
+        <h1>Fresh Food Delivered To Your Doorstep 🚀</h1>
+        <p>Order delicious dishes with instant live GPS delivery!</p>
+    </div>
+
+    <div class="search-container">
+        <input type="text" id="searchInput" class="search-box" placeholder="🔍 Search dishes, snacks..." oninput="handleSearch()">
+    </div>
+    <div class="filter-tags">
+        <div class="tag active" onclick="filterCategory('All', this)">All</div>
+        <div class="tag" onclick="filterCategory('Meals', this)">Meals</div>
+        <div class="tag" onclick="filterCategory('Biryani', this)">Biryani</div>
+        <div class="tag" onclick="filterCategory('Snacks', this)">Snacks</div>
+        <div class="tag" onclick="filterCategory('Beverages', this)">Beverages</div>
+    </div>
+
+    <div class="container">
+        <!-- Admin Dashboard -->
+        <div id="adminDashboard">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <h3 style="color: var(--primary);">🛠️ Admin Management Panel</h3>
+                <span style="font-size: 12px; color: var(--success); font-weight: bold;">● Active Admin</span>
+            </div>
+
+            <!-- Add/Edit Product -->
+            <div class="admin-form">
+                <input type="hidden" id="editDocId">
+                <input type="text" id="pName" class="input-control" placeholder="Dish Name">
+                <input type="number" id="pPrice" class="input-control" placeholder="Price (₹)">
+                <input type="text" id="pCat" class="input-control" placeholder="Category (Meals, Biryani, Snacks)">
+                <input type="text" id="pImg" class="input-control" placeholder="Image URL">
+                <div style="display: flex; gap: 8px; margin-top: 8px;">
+                    <button id="saveItemBtn" class="btn btn-primary" style="flex: 1;" onclick="adminSaveProduct()">+ Add to Food Menu</button>
+                    <button id="cancelEditBtn" class="btn btn-outline" style="display: none;" onclick="cancelEditing()">Cancel Edit</button>
+                </div>
+            </div>
+
+            <!-- Manage Menu Items -->
+            <h4 style="margin-top: 24px;">Manage Menu Items (Stock / Edit / Delete)</h4>
+            <div id="adminItemsList" style="max-height: 250px; overflow-y: auto; margin-top: 8px;">Loading items...</div>
+
+            <!-- Manage Orders -->
+            <h4 style="margin-top: 24px;">Incoming Customer Orders:</h4>
+            <div id="adminOrdersFeed">Loading live orders...</div>
+        </div>
+
+        <h3 style="margin-bottom: 12px; font-size: 16px;">Explore Menu</h3>
+        <div class="grid" id="productCatalog">Loading delicious food items...</div>
+    </div>
+
+    <!-- Modals: Cart & Live GPS Checkout -->
+    <div id="cartModal" class="modal">
+        <div class="modal-box">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                <h3>Your Food Tray</h3>
+                <span onclick="toggleCartModal()" style="font-size: 24px; cursor: pointer;">&times;</span>
+            </div>
+            <div id="cartList" style="max-height: 180px; overflow-y: auto;">Cart is empty.</div>
+            
+            <div style="padding: 10px 0; border-top: 1px solid var(--border); font-size: 14px;">
+                <div style="display: flex; justify-content: space-between;"><span>Subtotal:</span> <span id="cartSubtotal">₹0</span></div>
+                <div style="display: flex; justify-content: space-between;"><span>Delivery Fee:</span> <span id="cartDeliveryFee">₹0</span></div>
+                <div style="display: flex; justify-content: space-between; font-size: 16px; font-weight: bold; margin-top: 4px;">
+                    <span>Total Amount:</span>
+                    <span id="cartSum" style="color: var(--primary);">₹0</span>
+                </div>
+            </div>
+
+            <h4>Delivery Details:</h4>
+            <input type="text" id="orderCustName" class="input-control" placeholder="Full Name">
+            <input type="tel" id="orderCustPhone" class="input-control" placeholder="Mobile Number">
+            
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 8px;">
+                <small style="font-weight: bold; color: #64748b;">Address & Location:</small>
+                <button type="button" class="btn-loc" onclick="detectGPSLocation()">📍 Detect GPS Location</button>
+            </div>
+            <textarea id="orderCustAddress" class="input-control" rows="2" placeholder="House/Room No, Landmark, Area"></textarea>
+            <input type="hidden" id="geoMapLink">
+
+            <!-- Payment Options -->
+            <h4 style="margin-top: 12px;">Select Payment Mode:</h4>
+            <div class="pay-box">
+                <div id="payCOD" class="pay-option selected" onclick="selectPayment('COD')">💵 Cash on Delivery</div>
+                <div id="payUPI" class="pay-option" onclick="selectPayment('UPI')">📱 Pay via UPI</div>
+            </div>
+
+            <!-- UPI Dynamic Payment Container -->
+            <div id="upiContainer" style="display: none; text-align: center; background: #fff7ed; padding: 12px; border-radius: 8px; margin-top: 10px; border: 1px solid #fed7aa;">
+                <p style="font-size: 13px; font-weight: bold;">Scan QR to Pay via PhonePe / GPay / Paytm</p>
+                <img id="upiQrImg" src="" alt="UPI QR" style="width: 140px; height: 140px; margin: 8px auto; display: block;">
+                <a id="upiDeepLink" href="#" class="btn btn-primary" style="display: inline-block; padding: 6px 12px; font-size: 12px; margin-bottom: 8px;">⚡ Open UPI App Directly</a>
+                <input type="text" id="upiTxnId" class="input-control" placeholder="Enter 12-digit UPI Reference / UTR No.">
+            </div>
+
+            <button class="btn btn-primary btn-full" onclick="checkoutOrder()">Confirm & Place Order</button>
+        </div>
+    </div>
+
+    <!-- Modals: My Account & Live Tracking -->
+    <div id="accountModal" class="modal">
+        <div class="modal-box">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                <h3>👤 My Account</h3>
+                <span onclick="toggleAccountModal()" style="font-size: 24px; cursor: pointer;">&times;</span>
+            </div>
+            <p id="accountEmail" style="font-size: 14px; color: #64748b; margin-bottom: 14px; font-weight: 600;"></p>
+            
+            <h4 style="margin-bottom: 8px;">📦 My Orders & Tracking</h4>
+            <div id="userOrdersFeed" style="max-height: 350px; overflow-y: auto;">Loading your orders...</div>
+            
+            <button class="btn btn-danger btn-full" onclick="signOutUser()" style="margin-top: 20px;">🚪 Logout</button>
+        </div>
+    </div>
+
+    <!-- Modals: Auth -->
+    <div id="authModal" class="modal">
+        <div class="modal-box">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <h3 id="authHeader">Customer Login</h3>
+                <span onclick="toggleAuthModal()" style="font-size: 24px; cursor: pointer;">&times;</span>
+            </div>
+            <input type="email" id="authEmail" class="input-control" placeholder="Email Address">
+            <input type="password" id="authPass" class="input-control" placeholder="Password (min 6 chars)">
+            <button id="authBtnSubmit" class="btn btn-primary btn-full" onclick="authenticateUser()">Log In</button>
+            <p style="text-align: center; margin-top: 12px; font-size: 13px;">
+                <span id="authToggleText">New customer?</span>
+                <a href="javascript:void(0)" onclick="switchAuthFlow()" style="color: var(--primary); font-weight: bold;">Sign Up Here</a>
+            </p>
+        </div>
+    </div>
+
+    <script>
+        const firebaseConfig = {
+  apiKey: "AIzaSyBCrzX8H6RvnkPHhoJD8k39IhY8o0ovItg",
+  authDomain: "svrcart-f2f60.firebaseapp.com",
+  projectId: "svrcart-f2f60",
+  storageBucket: "svrcart-f2f60.firebasestorage.app",
+  messagingSenderId: "14065768296",
+  appId: "1:14065768296:web:02db4d7d06fc23da2e28dd"
+};
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+        const auth = firebase.auth();
+
+        // Admin & Business Settings
+        const ADMIN_EMAIL = "vijayratnamsaka@gmail.com";
+        const ADMIN_WHATSAPP_NUMBER = "919553004889"; // Mee WhatsApp number (with 91 country code)
+        const BUSINESS_UPI_ID = "sakavijay@ybl"; // Mee GooglePay / PhonePe UPI ID
+
+        let allProducts = [];
+        let cart = [];
+        let activeUser = null;
+        let isLoginScreen = true;
+        let selectedPaymentMode = "COD";
+        const DELIVERY_CHARGE = 30; // ₹30 if subtotal < ₹200
+        const FREE_DELIVERY_MIN = 200;
+
+        // Auth Listener
+        auth.onAuthStateChanged(user => {
+            activeUser = user;
+            const authBtn = document.getElementById("authBtn");
+            const accountBtn = document.getElementById("accountBtn");
+            const adminDashboard = document.getElementById("adminDashboard");
+
+            if (user) {
+                authBtn.style.display = "none";
+                accountBtn.style.display = "block";
+                accountBtn.innerText = `👤 ${user.email.split('@')[0]}`;
+                document.getElementById("accountEmail").innerText = `Signed in as: ${user.email}`;
+
+                if (user.email === ADMIN_EMAIL) {
+                    adminDashboard.style.display = "block";
+                    listenAdminOrders();
+                } else {
+                    adminDashboard.style.display = "none";
+                }
+            } else {
+                authBtn.style.display = "block";
+                accountBtn.style.display = "none";
+                adminDashboard.style.display = "none";
+            }
+        });
+
+        // Load Products
+        db.collection("products").onSnapshot(snapshot => {
+            allProducts = [];
+            snapshot.forEach(doc => allProducts.push({ id: doc.id, ...doc.data() }));
+            // Client-side sort so no composite index error happens
+            allProducts.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+            renderItems(allProducts);
+            renderAdminManageList();
+        });
+
+        function renderItems(items) {
+            const catalog = document.getElementById("productCatalog");
+            if (items.length === 0) {
+                catalog.innerHTML = "<p style='grid-column: 1/-1; text-align: center; color: #64748b;'>No items found in this section.</p>";
+                return;
+            }
+            catalog.innerHTML = items.map(p => {
+                const isOutOfStock = p.inStock === false;
+                return `
+                    <div class="card ${isOutOfStock ? 'out-of-stock' : ''}">
+                        ${isOutOfStock ? '<div class="stock-badge">Sold Out</div>' : ''}
+                        <img src="${p.image || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=300'}" alt="${p.name}">
+                        <div class="card-body">
+                            <div>
+                                <span class="item-category">${p.category || 'Food'}</span>
+                                <div class="card-title">${p.name}</div>
+                            </div>
+                            <div>
+                                <div class="card-price">₹${p.price}</div>
+                                <button class="btn btn-outline" style="width: 100%;" 
+                                    ${isOutOfStock ? 'disabled' : ''} 
+                                    onclick="addToTray('${p.id}')">
+                                    ${isOutOfStock ? 'Unavailable' : '+ Add'}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function handleSearch() {
+            const query = document.getElementById("searchInput").value.toLowerCase();
+            const filtered = allProducts.filter(p => p.name.toLowerCase().includes(query) || (p.category && p.category.toLowerCase().includes(query)));
+            renderItems(filtered);
+        }
+
+        function filterCategory(cat, el) {
+            document.querySelectorAll(".tag").forEach(t => t.classList.remove("active"));
+            el.classList.add("active");
+            if (cat === "All") renderItems(allProducts);
+            else renderItems(allProducts.filter(p => p.category && p.category.toLowerCase() === cat.toLowerCase()));
+        }
+
+        // Cart & Total Calculations
+        function addToTray(id) {
+            const p = allProducts.find(x => x.id === id);
+            if (p.inStock === false) return;
+            const exist = cart.find(x => x.id === id);
+            if (exist) exist.qty += 1;
+            else cart.push({ ...p, qty: 1 });
+            syncCartUI();
+        }
+
+        function changeQty(id, delta) {
+            const item = cart.find(x => x.id === id);
+            if (!item) return;
+            item.qty += delta;
+            if (item.qty <= 0) cart = cart.filter(x => x.id !== id);
+            syncCartUI();
+        }
+
+        function syncCartUI() {
+            const count = cart.reduce((s, i) => s + i.qty, 0);
+            document.getElementById("cartCount").innerText = count;
+            const list = document.getElementById("cartList");
+            if (cart.length === 0) {
+                list.innerHTML = "Cart is empty.";
+                document.getElementById("cartSubtotal").innerText = "₹0";
+                document.getElementById("cartDeliveryFee").innerText = "₹0";
+                document.getElementById("cartSum").innerText = "₹0";
+                return;
+            }
+            let subtotal = 0;
+            list.innerHTML = cart.map(i => {
+                subtotal += i.price * i.qty;
+                return `
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                        <div><b>${i.name}</b> <br><small>₹${i.price} x ${i.qty}</small></div>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <button class="btn btn-outline" style="padding: 2px 8px;" onclick="changeQty('${i.id}', -1)">-</button>
+                            <span>${i.qty}</span>
+                            <button class="btn btn-outline" style="padding: 2px 8px;" onclick="changeQty('${i.id}', 1)">+</button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            const deliveryFee = subtotal >= FREE_DELIVERY_MIN ? 0 : DELIVERY_CHARGE;
+            const total = subtotal + deliveryFee;
+
+            document.getElementById("cartSubtotal").innerText = `₹${subtotal}`;
+            document.getElementById("cartDeliveryFee").innerText = deliveryFee === 0 ? "FREE" : `₹${deliveryFee}`;
+            document.getElementById("cartSum").innerText = `₹${total}`;
+
+            updateUpiQR(total);
+        }
+
+        // Live GPS Location Detection
+        function detectGPSLocation() {
+            if (!navigator.geolocation) {
+                return alert("Geolocation is not supported by your browser!");
+            }
+            const btn = document.querySelector(".btn-loc");
+            btn.innerText = "⏳ Fetching GPS...";
+            navigator.geolocation.getCurrentPosition(
+                pos => {
+                    const lat = pos.coords.latitude;
+                    const lng = pos.coords.longitude;
+                    const mapUrl = `https://maps.google.com/?q=${lat},${lng}`;
+                    document.getElementById("geoMapLink").value = mapUrl;
+                    
+                    const addrBox = document.getElementById("orderCustAddress");
+                    addrBox.value = `📍 [GPS Attached]\nCoordinates: ${lat.toFixed(5)}, ${lng.toFixed(5)}\n` + addrBox.value;
+                    btn.innerText = "✅ Location Locked!";
+                },
+                err => {
+                    alert("Please allow Location Permission to detect your address.");
+                    btn.innerText = "📍 Detect GPS Location";
+                },
+                { enableHighAccuracy: true, timeout: 10000 }
+            );
+        }
+
+        // UPI Selection and Dynamic QR Code
+        function selectPayment(mode) {
+            selectedPaymentMode = mode;
+            document.getElementById("payCOD").classList.toggle("selected", mode === "COD");
+            document.getElementById("payUPI").classList.toggle("selected", mode === "UPI");
+            document.getElementById("upiContainer").style.display = mode === "UPI" ? "block" : "none";
+        }
+
+        function updateUpiQR(amount) {
+            if (amount <= 0) return;
+            const upiString = `upi://pay?pa=${BUSINESS_UPI_ID}&pn=SVRFoodStore&am=${amount}&cu=INR`;
+            const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(upiString)}`;
+            document.getElementById("upiQrImg").src = qrUrl;
+            document.getElementById("upiDeepLink").href = upiString;
+        }
+
+        // Checkout & WhatsApp Alert Trigger
+        async function checkoutOrder() {
+            if (!activeUser) {
+                toggleCartModal();
+                alert("Please log in to place your order!");
+                toggleAuthModal();
+                return;
+            }
+            if (cart.length === 0) return alert("Your cart is empty!");
+            
+            const name = document.getElementById("orderCustName").value.trim();
+            const phone = document.getElementById("orderCustPhone").value.trim();
+            const address = document.getElementById("orderCustAddress").value.trim();
+            const mapLink = document.getElementById("geoMapLink").value;
+            const txnId = document.getElementById("upiTxnId").value.trim();
+
+            if (!name || !phone || !address) return alert("Please fill name, phone, and delivery address!");
+            if (selectedPaymentMode === "UPI" && !txnId) return alert("Please enter the UPI Reference / UTR Number after paying!");
+
+            const subtotal = cart.reduce((s, i) => s + (i.price * i.qty), 0);
+            const deliveryFee = subtotal >= FREE_DELIVERY_MIN ? 0 : DELIVERY_CHARGE;
+            const total = subtotal + deliveryFee;
+
+            try {
+                const orderData = {
+                    userId: activeUser.uid,
+                    customerName: name,
+                    customerPhone: phone,
+                    customerAddress: address,
+                    googleMapsLink: mapLink || "Not specified",
+                    paymentMode: selectedPaymentMode,
+                    upiTxnId: txnId || "N/A",
+                    items: cart,
+                    subtotal: subtotal,
+                    deliveryFee: deliveryFee,
+                    totalAmount: total,
+                    status: "Order Placed",
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                };
+
+                await db.collection("orders").add(orderData);
+
+                // Prepare WhatsApp Notification Message
+                const itemsSummary = cart.map(i => `${i.name} (${i.qty})`).join(', ');
+                const whatsappMsg = `*🚨 New Order: SVR Food Store*\n---------------------------\n*Customer:* ${name}\n*Phone:* ${phone}\n*Items:* ${itemsSummary}\n*Total:* ₹${total} (${selectedPaymentMode})\n*Address:* ${address}\n*Maps:* ${mapLink || 'Manual Address'}`;
+                
+                alert("🎉 Order placed successfully! Sending details to store WhatsApp...");
+                
+                // Open WhatsApp with order details
+                window.open(`https://wa.me/${ADMIN_WHATSAPP_NUMBER}?text=${encodeURIComponent(whatsappMsg)}`, '_blank');
+
+                cart = [];
+                syncCartUI();
+                toggleCartModal();
+            } catch (e) {
+                alert("Order Error: " + e.message);
+            }
+        }
+
+        // Admin Management: Add, Edit, Delete, Toggle Stock
+        function renderAdminManageList() {
+            const box = document.getElementById("adminItemsList");
+            if (!box) return;
+            if (allProducts.length === 0) {
+                box.innerHTML = "<p style='color: #64748b;'>No items yet.</p>";
+                return;
+            }
+            box.innerHTML = allProducts.map(p => {
+                const inStock = p.inStock !== false;
+                return `
+                    <div class="admin-manage-item">
+                        <div>
+                            <b>${p.name}</b> - ₹${p.price} <br>
+                            <small style="color: ${inStock ? 'var(--success)' : 'var(--danger)'}; font-weight: bold;">
+                                ● ${inStock ? 'In Stock' : 'Out of Stock'}
+                            </small>
+                        </div>
+                        <div style="display: flex; gap: 6px; align-items: center;">
+                            <button class="btn btn-outline" style="padding: 4px 8px; font-size: 11px;" onclick="adminToggleStock('${p.id}', ${!inStock})">
+                                ${inStock ? 'Mark Out' : 'Mark In'}
+                            </button>
+                            <button class="btn btn-edit" onclick="startEditItem('${p.id}')">✏️</button>
+                            <button class="btn btn-danger" onclick="adminDeleteItem('${p.id}')">🗑️</button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        async function adminSaveProduct() {
+            const editId = document.getElementById("editDocId").value;
+            const name = document.getElementById("pName").value.trim();
+            const price = Number(document.getElementById("pPrice").value);
+            const category = document.getElementById("pCat").value.trim();
+            const image = document.getElementById("pImg").value.trim();
+
+            if (!name || !price) return alert("Provide name and price!");
+
+            try {
+                if (editId) {
+                    await db.collection("products").doc(editId).update({
+                        name, price, category: category || "General", image
+                    });
+                    alert("Item updated!");
+                } else {
+                    await db.collection("products").add({
+                        name, price, category: category || "General", image,
+                        inStock: true,
+                        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+                    alert("Added to menu!");
+                }
+                cancelEditing();
+            } catch (e) {
+                alert("Error: " + e.message);
+            }
+        }
+
+        async function adminToggleStock(id, status) {
+            await db.collection("products").doc(id).update({ inStock: status });
+        }
+
+        function startEditItem(id) {
+            const p = allProducts.find(x => x.id === id);
+            if (!p) return;
+            document.getElementById("editDocId").value = p.id;
+            document.getElementById("pName").value = p.name;
+            document.getElementById("pPrice").value = p.price;
+            document.getElementById("pCat").value = p.category || "";
+            document.getElementById("pImg").value = p.image || "";
+
+            document.getElementById("saveItemBtn").innerText = "Update Item";
+            document.getElementById("cancelEditBtn").style.display = "inline-block";
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        function cancelEditing() {
+            document.getElementById("editDocId").value = "";
+            document.getElementById("pName").value = "";
+            document.getElementById("pPrice").value = "";
+            document.getElementById("pCat").value = "";
+            document.getElementById("pImg").value = "";
+
+            document.getElementById("saveItemBtn").innerText = "+ Add to Food Menu";
+            document.getElementById("cancelEditBtn").style.display = "none";
+        }
+
+        async function adminDeleteItem(id) {
+            if (confirm("Delete this food item?")) {
+                await db.collection("products").doc(id).delete();
+            }
+        }
+
+        // Live Orders for Admin
+        function listenAdminOrders() {
+            db.collection("orders").onSnapshot(snap => {
+                const feed = document.getElementById("adminOrdersFeed");
+                if (snap.empty) { feed.innerHTML = "<p>No orders received.</p>"; return; }
+                const orders = [];
+                snap.forEach(doc => orders.push({ id: doc.id, ...doc.data() }));
+                orders.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+
+                feed.innerHTML = orders.map(o => `
+                    <div class="admin-order-card">
+                        <div style="display: flex; justify-content: space-between;">
+                            <b>${o.customerName} (${o.customerPhone})</b>
+                            <span style="font-weight: bold; color: var(--primary);">${o.status}</span>
+                        </div>
+                        <div><b>Address:</b> ${o.customerAddress}</div>
+                        ${o.googleMapsLink !== 'Not specified' ? `<div>📍 <a href="${o.googleMapsLink}" target="_blank" style="color: #0284c7; font-weight: bold;">Open Live GPS Location</a></div>` : ''}
+                        <div><b>Pay Mode:</b> ${o.paymentMode} ${o.upiTxnId !== 'N/A' ? `(UTR: ${o.upiTxnId})` : ''}</div>
+                        <small>Items: ${o.items.map(i => i.name + ' x' + i.qty).join(', ')}</small>
+                        <div style="margin-top: 8px; display: flex; justify-content: space-between; align-items: center;">
+                            <b>Total: ₹${o.totalAmount}</b>
+                            <div style="display: flex; gap: 6px;">
+                                <button class="btn btn-outline" onclick="updateOrderStatus('${o.id}', 'Preparing')">Preparing</button>
+                                <button class="btn btn-primary" onclick="updateOrderStatus('${o.id}', 'Delivered')">Delivered</button>
+                            </div>
+                        </div>
+                    </div>
+                `).join('');
+            });
+        }
+
+        async function updateOrderStatus(orderId, status) {
+            await db.collection("orders").doc(orderId).update({ status });
+        }
+
+        // Customer Live Orders & Tracking (Fixed Composite Index Issue)
+        function toggleAccountModal() {
+            const m = document.getElementById("accountModal");
+            const isOpen = m.style.display === "flex";
+            m.style.display = isOpen ? "none" : "flex";
+            if (!isOpen && activeUser) {
+                listenUserOrders();
+            }
+        }
+
+        function listenUserOrders() {
+            // Fetching by userId only to prevent index blocking
+            db.collection("orders").where("userId", "==", activeUser.uid).onSnapshot(snap => {
+                const list = document.getElementById("userOrdersFeed");
+                if (snap.empty) { list.innerHTML = "<p style='color: #64748b;'>No orders placed yet.</p>"; return; }
+                const userOrders = [];
+                snap.forEach(doc => userOrders.push({ id: doc.id, ...doc.data() }));
+                // Sort client-side
+                userOrders.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+
+                list.innerHTML = userOrders.map(o => {
+                    const s = o.status || "Order Placed";
+                    return `
+                        <div style="background: #f8fafc; border: 1px solid var(--border); padding: 12px; border-radius: 10px; margin-bottom: 12px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <b>Order Total: ₹${o.totalAmount}</b>
+                                <span style="font-size: 12px; font-weight: bold; color: var(--primary);">${s}</span>
+                            </div>
+                            
+                            <div class="track-step-container">
+                                <div class="track-step ${s === 'Order Placed' || s === 'Preparing' || s === 'Delivered' ? 'done' : ''}">✓ Placed</div>
+                                <div class="track-step ${s === 'Preparing' || s === 'Delivered' ? 'done' : (s === 'Preparing' ? 'active' : '')}">🍳 Preparing</div>
+                                <div class="track-step ${s === 'Delivered' ? 'done' : ''}">🛵 Delivered</div>
+                            </div>
+                            
+                            <small style="color: #64748b;">${o.items.map(i => i.name + ' (' + i.qty + ')').join(', ')}</small>
+                        </div>
+                    `;
+                }).join('');
+            }, err => {
+                document.getElementById("userOrdersFeed").innerHTML = `<p style="color:red;">Error loading orders: ${err.message}</p>`;
+            });
+        }
+
+        function signOutUser() {
+            auth.signOut();
+            toggleAccountModal();
+        }
+
+        function toggleCartModal() { const m = document.getElementById("cartModal"); m.style.display = m.style.display === "flex" ? "none" : "flex"; }
+        function toggleAuthModal() { const m = document.getElementById("authModal"); m.style.display = m.style.display === "flex" ? "none" : "flex"; }
+
+        function switchAuthFlow() {
+            isLoginScreen = !isLoginScreen;
+            document.getElementById("authHeader").innerText = isLoginScreen ? "Customer Login" : "Create Customer Account";
+            document.getElementById("authBtnSubmit").innerText = isLoginScreen ? "Log In" : "Sign Up";
+            document.getElementById("authToggleText").innerText = isLoginScreen ? "New customer?" : "Already registered?";
+        }
+
+        async function authenticateUser() {
+            const email = document.getElementById("authEmail").value.trim();
+            const pass = document.getElementById("authPass").value.trim();
+            if (!email || !pass) return alert("Please enter email & password");
+            try {
+                if (isLoginScreen) await auth.signInWithEmailAndPassword(email, pass);
+                else await auth.createUserWithEmailAndPassword(email, pass);
+                toggleAuthModal();
+            } catch (err) {
+                alert("Login Error: " + err.message);
+            }
+        }
+    </script>
+</body>
+</html>
